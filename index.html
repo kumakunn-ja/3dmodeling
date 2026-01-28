@@ -2,30 +2,26 @@
 <html lang="ja">
 <head>
     <meta charset="utf-8" />
-    <title>Webブラウザ 3Dモデリングサイト (プロパティ編集版)</title>
-    
+    <title>Web 3D Modeler - Shadow & Edit Fixed</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #f0f0f0; }
+        body { margin: 0; overflow: hidden; background-color: #222; font-family: sans-serif; }
         .dg.main { z-index: 100 !important; }
-
         #model-add-buttons {
             position: absolute; top: 10px; left: 10px; z-index: 100;
-            width: 245px; background-color: #1a1a1a; font-family: monospace; font-size: 11px;
+            width: 200px; background: rgba(30,30,30,0.9); color: white; padding: 10px; border-radius: 8px;
         }
-        #model-add-buttons h3 { margin: 0; padding: 4px 5px; color: #fff; background-color: #000; }
         #model-add-buttons button {
-            display: block; width: 98%; padding: 4px 0; margin: 1px auto; cursor: pointer;
-            background-color: #333; color: #fff; border: 1px solid #333; font-size: 11px;
+            display: block; width: 100%; margin: 5px 0; padding: 6px; cursor: pointer;
+            background: #444; color: white; border: 1px solid #555; border-radius: 4px;
+            font-size: 12px;
         }
-        #model-add-buttons button:hover { background-color: #444; }
-
+        #model-add-buttons button:hover { background: #666; }
         #exportModal {
             display:none; position:fixed; top:0; left:0; width:100%; height:100%; 
-            background:rgba(0,0,0,0.5); z-index:200; font-family: sans-serif;
+            background:rgba(0,0,0,0.7); z-index:200;
         }
         .modal-content { background:#fff; width:300px; margin:100px auto; padding:20px; border-radius:5px; }
     </style>
-
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.9/dat.gui.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -35,298 +31,306 @@
 </head>
 <body>
     <div id="model-add-buttons">
-        <h3>📐 モデルの追加</h3>
-        <button onclick="addBox()">立方体を追加</button>
-        <button onclick="addSphere()">球体を追加</button>
-        <button onclick="addCylinder()">円柱を追加</button> 
-        <button onclick="addPlane()">平面を追加</button> 
+        <strong>📐 オブジェクト追加</strong>
+        <button onclick="addMesh('box')">立方体</button>
+        <button onclick="addMesh('sphere')">球体</button>
+        <button onclick="addMesh('cylinder')">円柱</button>
+        <button onclick="addMesh('plane')">平面</button>
     </div>
-    
     <input type="file" id="fileInput" style="display: none;">
 
     <div id="exportModal">
         <div class="modal-content">
-            <h3>エクスポート設定</h3>
-            <select id="exportFormatSelect" style="width:100%; margin-bottom:15px; padding:5px;">
-                <option value="json">JSON (編集用)</option>
-                <option value="obj">OBJ (3Dソフト用)</option>
-                <option value="glb">GLB (汎用形式)</option>
+            <h3>エクスポート</h3>
+            <select id="exportFormat" style="width:100%; margin-bottom:15px; padding:5px;">
+                <option value="json">JSON (編集用データ)</option>
+                <option value="obj">OBJ (外部ソフト用)</option>
+                <option value="glb">GLB (汎用3D形式)</option>
             </select>
-            <button id="confirmExportButton" style="background:#007bff; color:white; border:none; padding:8px 15px; cursor:pointer;">保存を実行</button>
-            <button onclick="document.getElementById('exportModal').style.display='none'" style="padding:8px 15px; cursor:pointer;">キャンセル</button>
+            <button id="doExport" style="background:#007bff; color:white; border:none; padding:8px 15px; cursor:pointer;">保存</button>
+            <button onclick="document.getElementById('exportModal').style.display='none'">閉じる</button>
         </div>
     </div>
 
     <script>
-        // --- 基本設定 ---
+        // --- 1. 基本設定 ---
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0xf0f0f0); 
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        scene.background = new THREE.Color(0x333333);
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+        camera.position.set(5, 5, 5);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true; // 影を有効
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         document.body.appendChild(renderer.domElement);
 
-        const raycaster = new THREE.Raycaster();
-        const mouse = new THREE.Vector2();
-        const vertexMarkersGroup = new THREE.Group();
-        const faceMarkersGroup = new THREE.Group();
-        scene.add(vertexMarkersGroup, faceMarkersGroup);
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        const transformControls = new THREE.TransformControls(camera, renderer.domElement);
+        scene.add(transformControls);
+        transformControls.addEventListener('dragging-changed', e => controls.enabled = !e.value);
 
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5); 
+        scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
+        dirLight.position.set(5, 10, 7); 
+        dirLight.castShadow = true; 
+        dirLight.shadow.mapSize.set(1024, 1024);
+        scene.add(dirLight);
+
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), new THREE.MeshPhongMaterial({ color: 0x444444 }));
+        floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+        scene.add(new THREE.GridHelper(20, 20, 0x888888, 0x444444));
+
+        let currentMesh = null;
         let isVertexMode = false, isFaceMode = false;
-        let currentEditableMesh = null, selectedFaceIndex = -1;
-        const highlightMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00, opacity: 0.5, transparent: true, side: THREE.DoubleSide });
+        let selectedFaceIndex = -1;
+        const vertexMarkers = new THREE.Group();
+        const faceMarkers = new THREE.Group();
+        const highlightMat = new THREE.MeshBasicMaterial({ color: 0xffff00, opacity: 0.5, transparent: true, side: 2 });
         let faceHighlighter = null;
+        scene.add(vertexMarkers, faceMarkers);
 
-        const history = { stack: [], index: -1, limit: 30 };
+        // --- 2. 状態・履歴 (Undo & AutoSave) ---
+        const history = { stack: [], index: -1 };
         function saveState() {
             const meshes = [];
             scene.traverse(obj => {
-                if (obj.isMesh && !obj.userData.isMarker && obj.name !== "Highlighter" && obj.type !== "GridHelper") {
+                if (obj.isMesh && !obj.userData.isMarker && obj !== floor && obj.name !== "Highlighter") {
                     meshes.push({
-                        name: obj.name, position: obj.position.toArray(), rotation: obj.rotation.toArray(), scale: obj.scale.toArray(),
-                        color: '#' + obj.material.color.getHexString(),
-                        vertices: Array.from(obj.geometry.attributes.position.array)
+                        pos: obj.position.toArray(), rot: obj.rotation.toArray(), scale: obj.scale.toArray(),
+                        color: '#' + obj.material.color.getHexString(), wire: obj.material.wireframe,
+                        verts: Array.from(obj.geometry.attributes.position.array)
                     });
                 }
             });
             const state = JSON.stringify(meshes);
             if (history.index < history.stack.length - 1) history.stack = history.stack.slice(0, history.index + 1);
-            history.stack.push(state);
-            if (history.stack.length > history.limit) history.stack.shift(); else history.index++;
+            history.stack.push(state); history.index++;
+            localStorage.setItem('3d_modeler_save', state);
         }
-        function undo() { if (history.index > 0) applyState(history.stack[--history.index]); }
 
         function applyState(stateData) {
+            if(!stateData) return;
             const data = JSON.parse(stateData);
-            scene.children.filter(obj => obj.isMesh && !obj.userData.isMarker && obj.name !== "Highlighter" && obj.type !== "GridHelper").forEach(obj => {
+            scene.children.filter(obj => obj.isMesh && !obj.userData.isMarker && obj !== floor && obj.name !== "Highlighter").forEach(obj => {
                 scene.remove(obj); obj.geometry.dispose(); obj.material.dispose();
             });
             data.forEach(d => {
                 const geo = new THREE.BufferGeometry();
-                geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(d.vertices), 3));
+                geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(d.verts), 3));
                 geo.computeVertexNormals();
-                const mesh = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ color: d.color }));
-                mesh.position.fromArray(d.position); mesh.rotation.fromArray(d.rotation); mesh.scale.fromArray(d.scale);
-                scene.add(mesh);
+                const mesh = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ color: d.color, wireframe: d.wire }));
+                mesh.position.fromArray(d.pos); mesh.rotation.fromArray(d.rot); mesh.scale.fromArray(d.scale);
+                mesh.castShadow = mesh.receiveShadow = true; scene.add(mesh);
             });
             transformControls.detach();
-            updateGuiFromSelection();
+            updateGUI();
         }
 
-        // --- GUI & プロパティ制御 ---
-        const gui = new dat.GUI();
-        const guiParams = {
-            vertexMode: false, faceMode: false,
-            extrude: () => extrudeFace(),
-            undo: () => undo(),
-            export: () => document.getElementById('exportModal').style.display='block',
-            import: () => document.getElementById('fileInput').click(),
-            // 選択中のプロパティ
-            color: '#0077ff',
-            scaleX: 1, scaleY: 1, scaleZ: 1
-        };
-
-        gui.add(guiParams, 'vertexMode').name('頂点編集 (V)').onChange(toggleVertexEditMode).listen();
-        gui.add(guiParams, 'faceMode').name('面編集 (F)').onChange(toggleFaceEditMode).listen();
-        gui.add(guiParams, 'extrude').name('面を押し出し');
-        gui.add(guiParams, 'undo').name('元に戻す (Ctrl+Z)');
-
-        const propFolder = gui.addFolder('🎨 選択オブジェクトのプロパティ');
-        const colorCtrl = propFolder.addColor(guiParams, 'color').name('色').onChange(val => {
-            if (currentEditableMesh) currentEditableMesh.material.color.set(val);
-        }).onFinishChange(() => saveState());
-
-        const sxCtrl = propFolder.add(guiParams, 'scaleX', 0.1, 10).name('サイズ X').onChange(val => {
-            if (currentEditableMesh) currentEditableMesh.scale.x = val;
-        }).onFinishChange(() => saveState());
-
-        const syCtrl = propFolder.add(guiParams, 'scaleY', 0.1, 10).name('サイズ Y').onChange(val => {
-            if (currentEditableMesh) currentEditableMesh.scale.y = val;
-        }).onFinishChange(() => saveState());
-
-        const szCtrl = propFolder.add(guiParams, 'scaleZ', 0.1, 10).name('サイズ Z').onChange(val => {
-            if (currentEditableMesh) currentEditableMesh.scale.z = val;
-        }).onFinishChange(() => saveState());
-        propFolder.open();
-
-        const fileFolder = gui.addFolder('💾 ファイル操作');
-        fileFolder.add(guiParams, 'export').name('エクスポート');
-        fileFolder.add(guiParams, 'import').name('インポート');
-
-        function updateGuiFromSelection() {
-            if (!currentEditableMesh) return;
-            guiParams.color = '#' + currentEditableMesh.material.color.getHexString();
-            guiParams.scaleX = currentEditableMesh.scale.x;
-            guiParams.scaleY = currentEditableMesh.scale.y;
-            guiParams.scaleZ = currentEditableMesh.scale.z;
-            colorCtrl.updateDisplay();
-            sxCtrl.updateDisplay(); syCtrl.updateDisplay(); szCtrl.updateDisplay();
+        // --- 3. 頂点・面 編集ロジック ---
+        function toggleVertexMode(v) {
+            isVertexMode = v; if(v) { isFaceMode = false; guiParams.faceMode = false; faceMarkers.clear(); createVertexMarkers(); }
+            else vertexMarkers.clear();
         }
 
-        // --- モード管理（頂点・面） ---
-        function toggleVertexEditMode(enabled) {
-            isVertexMode = enabled;
-            if (enabled) { isFaceMode = false; guiParams.faceMode = false; faceMarkersGroup.clear(); createVertexMarkers(currentEditableMesh); }
-            else { vertexMarkersGroup.clear(); if (currentEditableMesh) transformControls.attach(currentEditableMesh); }
-        }
-        function toggleFaceEditMode(enabled) {
-            isFaceMode = enabled;
-            if (enabled) { isVertexMode = false; guiParams.vertexMode = false; vertexMarkersGroup.clear(); createFaceMarkers(currentEditableMesh); }
-            else { faceMarkersGroup.clear(); if (faceHighlighter) scene.remove(faceHighlighter); if (currentEditableMesh) transformControls.attach(currentEditableMesh); }
-        }
-
-        function createVertexMarkers(mesh) {
-            vertexMarkersGroup.clear(); if (!mesh) return;
-            const pos = mesh.geometry.attributes.position.array;
-            const markerGeo = new THREE.SphereGeometry(0.08);
-            const markerMat = new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false });
+        function createVertexMarkers() {
+            vertexMarkers.clear(); if (!currentMesh) return;
+            const pos = currentMesh.geometry.attributes.position.array;
             const map = new Map();
             for (let i = 0; i < pos.length; i += 3) {
-                const v = new THREE.Vector3(pos[i], pos[i+1], pos[i+2]);
-                const key = `${v.x.toFixed(3)},${v.y.toFixed(3)},${v.z.toFixed(3)}`;
+                const v = new THREE.Vector3(pos[i], pos[i+1], pos[i+2]).applyMatrix4(currentMesh.matrixWorld);
+                const key = v.toArray().map(n => n.toFixed(3)).join(',');
                 if (!map.has(key)) {
-                    const marker = new THREE.Mesh(markerGeo, markerMat.clone());
-                    marker.position.copy(v.applyMatrix4(mesh.matrixWorld));
-                    marker.userData = { isVertexMarker: true, indices: [i] };
-                    vertexMarkersGroup.add(marker); map.set(key, marker);
-                } else { map.get(key).userData.indices.push(i); }
+                    const m = new THREE.Mesh(new THREE.SphereGeometry(0.06), new THREE.MeshBasicMaterial({color: 0xff0000}));
+                    m.position.copy(v); m.userData = { isMarker: true, indices: [i] };
+                    vertexMarkers.add(m); map.set(key, m);
+                } else map.get(key).userData.indices.push(i);
             }
         }
 
-        function createFaceMarkers(mesh) {
-            faceMarkersGroup.clear(); if (!mesh) return;
-            const pos = mesh.geometry.attributes.position.array;
+        function createFaceMarkers() {
+            faceMarkers.clear(); if (!currentMesh) return;
+            const pos = currentMesh.geometry.attributes.position.array;
             for (let i = 0; i < pos.length; i += 9) {
                 const v1 = new THREE.Vector3(pos[i], pos[i+1], pos[i+2]);
                 const v2 = new THREE.Vector3(pos[i+3], pos[i+4], pos[i+5]);
                 const v3 = new THREE.Vector3(pos[i+6], pos[i+7], pos[i+8]);
-                const center = new THREE.Vector3().add(v1).add(v2).add(v3).divideScalar(3);
-                const marker = new THREE.Mesh(new THREE.SphereGeometry(0.05), new THREE.MeshBasicMaterial({color: 0x00ffff}));
-                marker.position.copy(center.applyMatrix4(mesh.matrixWorld));
-                marker.userData = { isFaceMarker: true, faceIndex: i / 9 };
-                faceMarkersGroup.add(marker);
+                const center = new THREE.Vector3().add(v1).add(v2).add(v3).divideScalar(3).applyMatrix4(currentMesh.matrixWorld);
+                const m = new THREE.Mesh(new THREE.SphereGeometry(0.05), new THREE.MeshBasicMaterial({color: 0x00ffff}));
+                m.position.copy(center); m.userData = { isMarker: true, faceIdx: i/9 };
+                faceMarkers.add(m);
             }
         }
 
         function extrudeFace() {
-            if (!currentEditableMesh || selectedFaceIndex === -1) return;
+            if (!currentMesh || selectedFaceIndex === -1) return;
             saveState();
-            const mesh = currentEditableMesh; const oldPos = mesh.geometry.attributes.position.array; const idx = selectedFaceIndex * 9;
-            const v1 = new THREE.Vector3(oldPos[idx], oldPos[idx+1], oldPos[idx+2]);
-            const v2 = new THREE.Vector3(oldPos[idx+3], oldPos[idx+4], oldPos[idx+5]);
-            const v3 = new THREE.Vector3(oldPos[idx+6], oldPos[idx+7], oldPos[idx+8]);
+            const pos = currentMesh.geometry.attributes.position.array; const idx = selectedFaceIndex * 9;
+            const v1 = new THREE.Vector3(pos[idx], pos[idx+1], pos[idx+2]);
+            const v2 = new THREE.Vector3(pos[idx+3], pos[idx+4], pos[idx+5]);
+            const v3 = new THREE.Vector3(pos[idx+6], pos[idx+7], pos[idx+8]);
             const normal = new THREE.Vector3().crossVectors(v2.clone().sub(v1), v3.clone().sub(v1)).normalize();
             const offset = normal.multiplyScalar(0.5);
-            const newVertices = Array.from(oldPos);
             const nv1 = v1.clone().add(offset), nv2 = v2.clone().add(offset), nv3 = v3.clone().add(offset);
-            newVertices[idx] = nv1.x; newVertices[idx+1] = nv1.y; newVertices[idx+2] = nv1.z;
-            newVertices[idx+3] = nv2.x; newVertices[idx+4] = nv2.y; newVertices[idx+5] = nv2.z;
-            newVertices[idx+6] = nv3.x; newVertices[idx+7] = nv3.y; newVertices[idx+8] = nv3.z;
-            const addSide = (a, b, na, nb) => {
-                newVertices.push(a.x, a.y, a.z, b.x, b.y, b.z, na.x, na.y, na.z);
-                newVertices.push(b.x, b.y, b.z, nb.x, nb.y, nb.z, na.x, na.y, na.z);
+            const newVerts = Array.from(pos);
+            newVerts[idx] = nv1.x; newVerts[idx+1] = nv1.y; newVerts[idx+2] = nv1.z;
+            newVerts[idx+3] = nv2.x; newVerts[idx+4] = nv2.y; newVerts[idx+5] = nv2.z;
+            newVerts[idx+6] = nv3.x; newVerts[idx+7] = nv3.y; newVerts[idx+8] = nv3.z;
+            const addS = (a, b, na, nb) => {
+                newVerts.push(a.x,a.y,a.z, b.x,b.y,b.z, na.x,na.y,na.z);
+                newVerts.push(b.x,b.y,b.z, nb.x,nb.y,nb.z, na.x,na.y,na.z);
             };
-            addSide(v1, v2, nv1, nv2); addSide(v2, v3, nv2, nv3); addSide(v3, v1, nv3, nv1);
-            mesh.geometry.dispose(); mesh.geometry = new THREE.BufferGeometry();
-            mesh.geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(newVertices), 3));
-            mesh.geometry.computeVertexNormals();
-            createFaceMarkers(mesh); saveState();
+            addS(v1, v2, nv1, nv2); addS(v2, v3, nv2, nv3); addS(v3, v1, nv3, nv1);
+            updateMeshGeo(newVerts);
         }
 
-        // --- ライティング & コントロール ---
-        const amb = new THREE.AmbientLight(0xffffff, 0.6); scene.add(amb);
-        const dir = new THREE.DirectionalLight(0xffffff, 0.6); dir.position.set(10, 20, 10); scene.add(dir);
-        scene.add(new THREE.GridHelper(20, 20));
-        const controls = new THREE.OrbitControls(camera, renderer.domElement);
-        camera.position.set(5, 5, 5); controls.update();
-        const transformControls = new THREE.TransformControls(camera, renderer.domElement);
-        scene.add(transformControls);
-        transformControls.addEventListener('dragging-changed', e => controls.enabled = !e.value);
-        transformControls.addEventListener('objectChange', () => {
-            if (isVertexMode && currentEditableMesh) {
-                const pos = currentEditableMesh.geometry.attributes.position;
-                const invMat = new THREE.Matrix4().copy(currentEditableMesh.matrixWorld).invert();
-                vertexMarkersGroup.children.forEach(m => {
-                    const local = m.position.clone().applyMatrix4(invMat);
-                    m.userData.indices.forEach(idx => pos.setXYZ(idx/3, local.x, local.y, local.z));
-                });
-                pos.needsUpdate = true; currentEditableMesh.geometry.computeVertexNormals();
-            }
-        });
+        function insetFace() {
+            if (!currentMesh || selectedFaceIndex === -1) return;
+            saveState();
+            const pos = currentMesh.geometry.attributes.position.array; const idx = selectedFaceIndex * 9;
+            const v1 = new THREE.Vector3(pos[idx], pos[idx+1], pos[idx+2]);
+            const v2 = new THREE.Vector3(pos[idx+3], pos[idx+4], pos[idx+5]);
+            const v3 = new THREE.Vector3(pos[idx+6], pos[idx+7], pos[idx+8]);
+            const center = new THREE.Vector3().add(v1).add(v2).add(v3).divideScalar(3);
+            const nv1 = v1.clone().lerp(center, 0.3), nv2 = v2.clone().lerp(center, 0.3), nv3 = v3.clone().lerp(center, 0.3);
+            const newVerts = Array.from(pos);
+            newVerts[idx]=nv1.x; newVerts[idx+1]=nv1.y; newVerts[idx+2]=nv1.z;
+            newVerts[idx+3]=nv2.x; newVerts[idx+4]=nv2.y; newVerts[idx+5]=nv2.z;
+            newVerts[idx+6]=nv3.x; newVerts[idx+7]=nv3.y; newVerts[idx+8]=nv3.z;
+            const addS = (a, b, na, nb) => {
+                newVerts.push(a.x,a.y,a.z, b.x,b.y,b.z, na.x,na.y,na.z);
+                newVerts.push(b.x,b.y,b.z, nb.x,nb.y,nb.z, na.x,na.y,na.z);
+            };
+            addS(v1, v2, nv1, nv2); addS(v2, v3, nv2, nv3); addS(v3, v1, nv3, nv1);
+            updateMeshGeo(newVerts);
+        }
 
-        // --- イベントリスナー ---
+        function updateMeshGeo(verts) {
+            currentMesh.geometry.dispose(); currentMesh.geometry = new THREE.BufferGeometry();
+            currentMesh.geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3));
+            currentMesh.geometry.computeVertexNormals(); createFaceMarkers(); saveState();
+        }
+
+        // --- 4. GUI 設定 ---
+        const gui = new dat.GUI();
+        const guiParams = {
+            vertexMode: false, faceMode: false,
+            color: '#0077ff', wireframe: false,
+            showShadows: true, lightIntensity: 0.7,
+            scaleX: 1, scaleY: 1, scaleZ: 1,
+            extrude: () => extrudeFace(), inset: () => insetFace(),
+            duplicate: () => { if(currentMesh){ const c = currentMesh.clone(); c.position.x+=1; scene.add(c); saveState(); }},
+            delete: () => { if(currentMesh){ scene.remove(currentMesh); transformControls.detach(); currentMesh=null; saveState(); }},
+            screenshot: () => { const a = document.createElement('a'); a.download='model.png'; a.href=renderer.domElement.toDataURL(); a.click(); },
+            export: () => document.getElementById('exportModal').style.display='block'
+        };
+
+        const modeF = gui.addFolder('🛠 モード切替');
+        modeF.add(guiParams, 'vertexMode').name('頂点編集 (V)').onChange(toggleVertexMode).listen();
+        modeF.add(guiParams, 'faceMode').name('面編集 (F)').onChange(v => { isFaceMode=v; if(v){ isVertexMode=false; guiParams.vertexMode=false; vertexMarkers.clear(); createFaceMarkers();} else faceMarkers.clear(); }).listen();
+        modeF.open();
+
+        const propF = gui.addFolder('🎨 プロパティ');
+        propF.addColor(guiParams, 'color').name('色').onChange(v => { if(currentMesh) currentMesh.material.color.set(v); });
+        propF.add(guiParams, 'wireframe').name('線枠表示').onChange(v => { if(currentMesh) currentMesh.material.wireframe = v; });
+        propF.add(guiParams, 'scaleX', 0.1, 5).onChange(v => { if(currentMesh) currentMesh.scale.x = v; }).listen();
+        propF.add(guiParams, 'scaleY', 0.1, 5).onChange(v => { if(currentMesh) currentMesh.scale.y = v; }).listen();
+        propF.add(guiParams, 'scaleZ', 0.1, 5).onChange(v => { if(currentMesh) currentMesh.scale.z = v; }).listen();
+        propF.open();
+
+        // 👁 視覚効果フォルダ（ここに影を復活）
+        const viewF = gui.addFolder('👁 視覚効果');
+        viewF.add(guiParams, 'showShadows').name('影を表示').onChange(v => {
+            renderer.shadowMap.enabled = v;
+            scene.traverse(obj => { if(obj.isMesh) obj.material.needsUpdate = true; }); // 影の再計算を促す
+        });
+        viewF.add(guiParams, 'lightIntensity', 0, 2).name('ライトの強さ').onChange(v => { dirLight.intensity = v; });
+        viewF.open();
+
+        const toolF = gui.addFolder('🚀 ツール');
+        toolF.add(guiParams, 'extrude').name('押し出し');
+        toolF.add(guiParams, 'inset').name('インセット');
+        toolF.add(guiParams, 'duplicate').name('複製 (Ctrl+D)');
+        toolF.add(guiParams, 'delete').name('削除 (Del)');
+        toolF.add(guiParams, 'screenshot').name('画像保存');
+        toolF.add(guiParams, 'export').name('エクスポート');
+
+        function updateGUI() {
+            if(!currentMesh) return;
+            guiParams.color = '#' + currentMesh.material.color.getHexString();
+            guiParams.scaleX = currentMesh.scale.x; guiParams.scaleY = currentMesh.scale.y; guiParams.scaleZ = currentMesh.scale.z;
+            gui.updateDisplay();
+        }
+
+        // --- 5. イベントリスナー ---
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
         window.addEventListener('pointerdown', e => {
             if (transformControls.dragging) return;
-            mouse.x = (e.clientX / window.innerWidth) * 2 - 1; mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            mouse.x = (e.clientX/window.innerWidth)*2-1; mouse.y = -(e.clientY/window.innerHeight)*2+1;
             raycaster.setFromCamera(mouse, camera);
-            if (isVertexMode) {
-                const hits = raycaster.intersectObjects(vertexMarkersGroup.children);
-                if (hits.length > 0) transformControls.attach(hits[0].object);
-            } else if (isFaceMode) {
-                const hits = raycaster.intersectObjects(faceMarkersGroup.children);
-                if (hits.length > 0) {
-                    selectedFaceIndex = hits[0].object.userData.faceIndex;
-                    if (faceHighlighter) scene.remove(faceHighlighter);
-                    const pos = currentEditableMesh.geometry.attributes.position.array;
-                    const idx = selectedFaceIndex * 9;
+            if(isVertexMode) {
+                const hits = raycaster.intersectObjects(vertexMarkers.children);
+                if(hits.length>0) transformControls.attach(hits[0].object);
+            } else if(isFaceMode) {
+                const hits = raycaster.intersectObjects(faceMarkers.children);
+                if(hits.length>0) {
+                    selectedFaceIndex = hits[0].object.userData.faceIdx;
+                    if(faceHighlighter) scene.remove(faceHighlighter);
+                    const pos = currentMesh.geometry.attributes.position.array; const i = selectedFaceIndex*9;
                     const geo = new THREE.BufferGeometry();
-                    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([pos[idx], pos[idx+1], pos[idx+2], pos[idx+3], pos[idx+4], pos[idx+5], pos[idx+6], pos[idx+7], pos[idx+8]]), 3));
-                    faceHighlighter = new THREE.Mesh(geo, highlightMaterial); faceHighlighter.applyMatrix4(currentEditableMesh.matrixWorld); scene.add(faceHighlighter);
+                    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([pos[i],pos[i+1],pos[i+2], pos[i+3],pos[i+4],pos[i+5], pos[i+6],pos[i+7],pos[i+8]]),3));
+                    faceHighlighter = new THREE.Mesh(geo, highlightMat); faceHighlighter.applyMatrix4(currentMesh.matrixWorld);
+                    faceHighlighter.name = "Highlighter"; scene.add(faceHighlighter);
                 }
             } else {
-                const hits = raycaster.intersectObjects(scene.children.filter(obj => obj.isMesh && !obj.userData.isMarker));
-                if (hits.length > 0) { 
-                    currentEditableMesh = hits[0].object; 
-                    transformControls.attach(currentEditableMesh);
-                    updateGuiFromSelection(); // 選択時にメニューを更新
-                }
+                const hits = raycaster.intersectObjects(scene.children.filter(o => o.isMesh && !o.userData.isMarker && o !== floor));
+                if(hits.length>0) { currentMesh = hits[0].object; transformControls.attach(currentMesh); updateGUI(); }
             }
         });
 
-        // エクスポート実行
-        document.getElementById('confirmExportButton').addEventListener('click', () => {
-            const format = document.getElementById('exportFormatSelect').value;
-            if (format === 'json') {
-                const link = document.createElement('a');
-                link.href = 'data:text/json;charset=utf-8,' + encodeURIComponent(history.stack[history.index]);
-                link.download = 'scene.json'; link.click();
-            } else if (format === 'obj') {
-                const exporter = new THREE.OBJExporter();
-                const result = exporter.parse(scene);
-                const blob = new Blob([result], { type: 'text/plain' });
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(blob); link.download = 'model.obj'; link.click();
-            } else if (format === 'glb') {
-                const exporter = new THREE.GLTFExporter();
-                exporter.parse(scene, (result) => {
-                    const blob = new Blob([result], { type: 'application/octet-stream' });
-                    const link = document.createElement('a');
-                    link.href = URL.createObjectURL(blob); link.download = 'model.glb'; link.click();
-                }, { binary: true });
+        transformControls.addEventListener('objectChange', () => {
+            if(isVertexMode && currentMesh) {
+                const pos = currentMesh.geometry.attributes.position;
+                const inv = new THREE.Matrix4().copy(currentMesh.matrixWorld).invert();
+                vertexMarkers.children.forEach(m => {
+                    const local = m.position.clone().applyMatrix4(inv);
+                    m.userData.indices.forEach(idx => pos.setXYZ(idx/3, local.x, local.y, local.z));
+                });
+                pos.needsUpdate = true; currentMesh.geometry.computeVertexNormals();
             }
-            document.getElementById('exportModal').style.display = 'none';
-        });
-
-        document.getElementById('fileInput').addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            const reader = new FileReader();
-            reader.onload = (event) => applyState(event.target.result);
-            reader.readAsText(file);
         });
 
         window.addEventListener('keydown', e => {
-            if (e.key.toLowerCase() === 'v') { guiParams.vertexMode = !guiParams.vertexMode; toggleVertexEditMode(guiParams.vertexMode); }
-            if (e.key.toLowerCase() === 'f') { guiParams.faceMode = !guiParams.faceMode; toggleFaceEditMode(guiParams.faceMode); }
-            if (e.ctrlKey && e.key === 'z') undo();
+            if(e.key.toLowerCase()==='v') { guiParams.vertexMode=!guiParams.vertexMode; toggleVertexMode(guiParams.vertexMode); }
+            if(e.key.toLowerCase()==='f') { isFaceMode=!isFaceMode; guiParams.faceMode=isFaceMode; }
+            if(e.key==='Delete') guiParams.delete();
+            if(e.ctrlKey && e.key==='d') { e.preventDefault(); guiParams.duplicate(); }
+            if(e.ctrlKey && e.key==='z') { if(history.index>0) applyState(history.stack[--history.index]); }
         });
 
-        function addBox() { const m = new THREE.Mesh(new THREE.BoxGeometry(1,1,1).toNonIndexed(), new THREE.MeshPhongMaterial({color: 0x0077ff})); m.position.y=0.5; scene.add(m); currentEditableMesh=m; transformControls.attach(m); updateGuiFromSelection(); saveState(); }
-        function addSphere() { const m = new THREE.Mesh(new THREE.SphereGeometry(0.7,12,12).toNonIndexed(), new THREE.MeshPhongMaterial({color: 0x00ff77})); m.position.y=0.7; scene.add(m); currentEditableMesh=m; transformControls.attach(m); updateGuiFromSelection(); saveState(); }
-        function addCylinder() { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.5,1,12).toNonIndexed(), new THREE.MeshPhongMaterial({color: 0xff7700})); m.position.y=0.5; scene.add(m); currentEditableMesh=m; transformControls.attach(m); updateGuiFromSelection(); saveState(); }
-        function addPlane() { const m = new THREE.Mesh(new THREE.PlaneGeometry(2,2).toNonIndexed(), new THREE.MeshPhongMaterial({color: 0x777777, side:2})); m.rotation.x=-Math.PI/2; scene.add(m); currentEditableMesh=m; transformControls.attach(m); updateGuiFromSelection(); saveState(); }
+        document.getElementById('doExport').onclick = () => {
+            const fmt = document.getElementById('exportFormat').value;
+            if(fmt==='json') { const b=new Blob([history.stack[history.index]],{type:'text/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='scene.json'; a.click(); }
+            else if(fmt==='obj') { const s=new THREE.OBJExporter().parse(scene); const b=new Blob([s],{type:'text/plain'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='model.obj'; a.click(); }
+            document.getElementById('exportModal').style.display='none';
+        };
+
+        function addMesh(type) {
+            let geo;
+            if(type==='box') geo = new THREE.BoxGeometry(1,1,1);
+            else if(type==='sphere') geo = new THREE.SphereGeometry(0.7,16,16);
+            else if(type==='cylinder') geo = new THREE.CylinderGeometry(0.5,0.5,1,16);
+            else geo = new THREE.PlaneGeometry(2,2);
+            const m = new THREE.Mesh(geo.toNonIndexed(), new THREE.MeshPhongMaterial({color: 0x0077ff}));
+            m.castShadow = m.receiveShadow = true; m.position.y = (type==='plane')?0.01:0.5;
+            scene.add(m); currentMesh=m; transformControls.attach(m); updateGUI(); saveState();
+        }
 
         function animate() { requestAnimationFrame(animate); renderer.render(scene, camera); }
-        animate(); saveState();
+        animate();
+        if(localStorage.getItem('3d_modeler_save')) applyState(localStorage.getItem('3d_modeler_save'));
     </script>
 </body>
 </html>
