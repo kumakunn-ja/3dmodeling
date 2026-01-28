@@ -2,1171 +2,331 @@
 <html lang="ja">
 <head>
     <meta charset="utf-8" />
-    <title>Webブラウザ 3Dモデリングサイト (拡張機能対応)</title>
+    <title>Webブラウザ 3Dモデリングサイト (プロパティ編集版)</title>
     
     <style>
         body { margin: 0; overflow: hidden; background-color: #f0f0f0; }
-        
-        /* dat.GUIの位置調整（右上のパネル） */
         .dg.main { z-index: 100 !important; }
 
-        /* ---------------------------------------------------- */
-        /* 左上のモデル追加UIと階層リストのスタイル */
-        /* ---------------------------------------------------- */
-        
-        #left-panel-container {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            z-index: 100;
-            width: 250px;
-            box-sizing: border-box;
-            font-family: Menlo, "Lucida Console", Monaco, monospace;
-            font-size: 11px;
-        }
-
         #model-add-buttons {
-            padding: 0; 
-            background-color: #1a1a1a; 
-            border: 0; 
-            border-radius: 3px 3px 0 0;
-            margin-bottom: 5px; /* 階層リストとの間にスペース */
+            position: absolute; top: 10px; left: 10px; z-index: 100;
+            width: 245px; background-color: #1a1a1a; font-family: monospace; font-size: 11px;
         }
-        
-        #model-add-buttons h3 {
-            margin: 0;
-            padding: 4px 5px;
-            font-size: 11px;
-            font-weight: bold;
-            color: #fff; 
-            background-color: #000000; 
-            border: none;
-            cursor: pointer;
-            line-height: 15px;
-        }
-        
+        #model-add-buttons h3 { margin: 0; padding: 4px 5px; color: #fff; background-color: #000; }
         #model-add-buttons button {
-            display: block; 
-            width: 98%; 
-            padding: 4px 0; 
-            margin: 1px auto; 
-            cursor: pointer;
-            
-            background-color: #333; 
-            color: #fff; 
-            border: 1px solid #333; 
-            border-radius: 0; 
-            font-size: 11px;
-            text-align: center;
-            
-            height: 20px; 
-            line-height: 20px; 
-            box-sizing: border-box; 
+            display: block; width: 98%; padding: 4px 0; margin: 1px auto; cursor: pointer;
+            background-color: #333; color: #fff; border: 1px solid #333; font-size: 11px;
         }
-        
-        #model-add-buttons button:hover {
-            background-color: #444; 
-            opacity: 1.0; 
-        }
+        #model-add-buttons button:hover { background-color: #444; }
 
-        /* 階層リスト */
-        #hierarchy-list {
-            background-color: #1a1a1a;
-            color: #fff;
-            border-radius: 3px;
-            padding: 5px 0;
-            max-height: 300px;
-            overflow-y: auto;
+        #exportModal {
+            display:none; position:fixed; top:0; left:0; width:100%; height:100%; 
+            background:rgba(0,0,0,0.5); z-index:200; font-family: sans-serif;
         }
-
-        #hierarchy-list ul {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-        }
-
-        #hierarchy-list li {
-            padding: 3px 10px;
-            cursor: pointer;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        #hierarchy-list li:hover {
-            background-color: #444;
-        }
-
-        #hierarchy-list li.selected {
-            background-color: #007bff;
-        }
-
-        .object-name {
-            flex-grow: 1;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .action-icon {
-            margin-left: 5px;
-            font-size: 12px;
-            opacity: 0.7;
-            transition: opacity 0.2s;
-        }
-
-        .action-icon:hover {
-            opacity: 1.0;
-        }
-
+        .modal-content { background:#fff; width:300px; margin:100px auto; padding:20px; border-radius:5px; }
     </style>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.9/dat.gui.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
-
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/OBJExporter.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/GLTFExporter.js"></script>
-
 </head>
 <body>
-    <div id="left-panel-container">
-        <div id="model-add-buttons">
-            <h3>📐 モデルの追加</h3>
-            <button onclick="addBox()">立方体を追加</button>
-            <button onclick="addSphere()">球体を追加</button>
-            <button onclick="addTorus()">ドーナツを追加</button>
-            <button onclick="addCylinder()">円柱を追加</button> 
-            <button onclick="addPlane()">平面を追加</button> 
-        </div>
-        
-        <div id="hierarchy-list">
-            <h3>🗂️ シーン階層</h3>
-            <ul id="object-list">
-                </ul>
-        </div>
+    <div id="model-add-buttons">
+        <h3>📐 モデルの追加</h3>
+        <button onclick="addBox()">立方体を追加</button>
+        <button onclick="addSphere()">球体を追加</button>
+        <button onclick="addCylinder()">円柱を追加</button> 
+        <button onclick="addPlane()">平面を追加</button> 
     </div>
     
     <input type="file" id="fileInput" style="display: none;">
 
-    <div id="exportModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background-color:rgba(0,0,0,0.5); z-index:200; font-family: sans-serif;">
-        <div style="background-color:#fff; width:300px; margin:100px auto; padding:20px; border-radius:5px; box-shadow:0 0 10px #000;">
-            <h3 style="margin-top:0;">エクスポート設定</h3>
-            
-            <label for="exportFormatSelect" style="display:block; margin-bottom: 5px;">形式を選択:</label>
-            <select id="exportFormatSelect" style="width:100%; margin-bottom:15px; padding:8px; border: 1px solid #ccc; border-radius: 3px;">
-                <option value="json">JSON (Three.js シーン)</option>
-                <option value="obj">OBJ (ジオメトリ/マテリアル)</option>
-                <option value="glb">GLB (バイナリ glTF)</option>
+    <div id="exportModal">
+        <div class="modal-content">
+            <h3>エクスポート設定</h3>
+            <select id="exportFormatSelect" style="width:100%; margin-bottom:15px; padding:5px;">
+                <option value="json">JSON (編集用)</option>
+                <option value="obj">OBJ (3Dソフト用)</option>
+                <option value="glb">GLB (汎用形式)</option>
             </select>
-            
-            <div id="jsonOptions" style="margin-bottom:20px; padding: 10px; border: 1px solid #eee; border-radius: 3px; background-color: #f9f9f9;">
-                <label>
-                    <input type="checkbox" id="includeGeometryCheckbox" checked style="margin-right: 5px;">
-                    ジオメトリデータを含める (JSONのみ)
-                </label>
-            </div>
-            
-            <button id="confirmExportButton" style="padding: 8px 15px; background-color:#007bff; color:white; border:none; border-radius:3px; cursor:pointer; margin-right:10px;">
-                保存を実行
-            </button>
-            <button id="cancelExportButton" style="padding: 8px 15px; background-color:#ccc; border:none; border-radius:3px; cursor:pointer;">
-                キャンセル
-            </button>
+            <button id="confirmExportButton" style="background:#007bff; color:white; border:none; padding:8px 15px; cursor:pointer;">保存を実行</button>
+            <button onclick="document.getElementById('exportModal').style.display='none'" style="padding:8px 15px; cursor:pointer;">キャンセル</button>
         </div>
     </div>
-    
+
     <script>
-        // ----------------------------------------------------
-        // 1. 変数と初期設定 
-        // ----------------------------------------------------
-        
+        // --- 基本設定 ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0xf0f0f0); 
-        
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // オブジェクト選択のためのRaycasting変数
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
-
-        // 頂点編集関連の変数
         const vertexMarkersGroup = new THREE.Group();
-        vertexMarkersGroup.name = 'VertexMarkers';
-        scene.add(vertexMarkersGroup);
-        let isVertexMode = false;
-        let currentEditableMesh = null;
-        let uniqueVerticesMap = new Map();
+        const faceMarkersGroup = new THREE.Group();
+        scene.add(vertexMarkersGroup, faceMarkersGroup);
 
-        // カメラ移動設定
-        const moveSpeed = 0.1; 
-        const keysPressed = {}; // 押されたキーの状態を保持
-        
-        // GUIコントロール参照用
-        let gui, positionFolder, rotationFolder, scaleFolder, materialFolder;
+        let isVertexMode = false, isFaceMode = false;
+        let currentEditableMesh = null, selectedFaceIndex = -1;
+        const highlightMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00, opacity: 0.5, transparent: true, side: THREE.DoubleSide });
+        let faceHighlighter = null;
 
+        const history = { stack: [], index: -1, limit: 30 };
+        function saveState() {
+            const meshes = [];
+            scene.traverse(obj => {
+                if (obj.isMesh && !obj.userData.isMarker && obj.name !== "Highlighter" && obj.type !== "GridHelper") {
+                    meshes.push({
+                        name: obj.name, position: obj.position.toArray(), rotation: obj.rotation.toArray(), scale: obj.scale.toArray(),
+                        color: '#' + obj.material.color.getHexString(),
+                        vertices: Array.from(obj.geometry.attributes.position.array)
+                    });
+                }
+            });
+            const state = JSON.stringify(meshes);
+            if (history.index < history.stack.length - 1) history.stack = history.stack.slice(0, history.index + 1);
+            history.stack.push(state);
+            if (history.stack.length > history.limit) history.stack.shift(); else history.index++;
+        }
+        function undo() { if (history.index > 0) applyState(history.stack[--history.index]); }
 
-        // ----------------------------------------------------
-        // 2. 光源の追加 (PBR対応のため環境光+スポットライト)
-        // ----------------------------------------------------
-        
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.3); 
-        scene.add(ambientLight);
-
-        // 新機能: スポットライトの追加
-        const spotLight = new THREE.SpotLight(0xffffff, 1.0, 10, Math.PI / 4, 0.5, 2);
-        spotLight.position.set(5, 10, 5);
-        spotLight.castShadow = true;
-        scene.add(spotLight);
-        
-        const spotLightHelper = new THREE.SpotLightHelper(spotLight);
-        spotLightHelper.visible = false; 
-        scene.add(spotLightHelper);
-
-
-        // ----------------------------------------------------
-        // 3. 床（点線グリッド）の作成と機能
-        // ----------------------------------------------------
-        
-        const gridHelper = new THREE.GridHelper(20, 20, 0x000000, 0x555555);
-        gridHelper.material.opacity = 0.5; 
-        gridHelper.material.transparent = true; 
-        gridHelper.position.y = 0; 
-        gridHelper.name = 'GridHelper';
-        scene.add(gridHelper);
-
-        function toggleGroundPlane(isVisible) {
-            gridHelper.visible = isVisible; 
+        function applyState(stateData) {
+            const data = JSON.parse(stateData);
+            scene.children.filter(obj => obj.isMesh && !obj.userData.isMarker && obj.name !== "Highlighter" && obj.type !== "GridHelper").forEach(obj => {
+                scene.remove(obj); obj.geometry.dispose(); obj.material.dispose();
+            });
+            data.forEach(d => {
+                const geo = new THREE.BufferGeometry();
+                geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(d.vertices), 3));
+                geo.computeVertexNormals();
+                const mesh = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ color: d.color }));
+                mesh.position.fromArray(d.position); mesh.rotation.fromArray(d.rotation); mesh.scale.fromArray(d.scale);
+                scene.add(mesh);
+            });
+            transformControls.detach();
+            updateGuiFromSelection();
         }
 
-        // ----------------------------------------------------
-        // 4. コントロールのセットアップ (OrbitControls, TransformControls) 
-        // ----------------------------------------------------
+        // --- GUI & プロパティ制御 ---
+        const gui = new dat.GUI();
+        const guiParams = {
+            vertexMode: false, faceMode: false,
+            extrude: () => extrudeFace(),
+            undo: () => undo(),
+            export: () => document.getElementById('exportModal').style.display='block',
+            import: () => document.getElementById('fileInput').click(),
+            // 選択中のプロパティ
+            color: '#0077ff',
+            scaleX: 1, scaleY: 1, scaleZ: 1
+        };
 
+        gui.add(guiParams, 'vertexMode').name('頂点編集 (V)').onChange(toggleVertexEditMode).listen();
+        gui.add(guiParams, 'faceMode').name('面編集 (F)').onChange(toggleFaceEditMode).listen();
+        gui.add(guiParams, 'extrude').name('面を押し出し');
+        gui.add(guiParams, 'undo').name('元に戻す (Ctrl+Z)');
+
+        const propFolder = gui.addFolder('🎨 選択オブジェクトのプロパティ');
+        const colorCtrl = propFolder.addColor(guiParams, 'color').name('色').onChange(val => {
+            if (currentEditableMesh) currentEditableMesh.material.color.set(val);
+        }).onFinishChange(() => saveState());
+
+        const sxCtrl = propFolder.add(guiParams, 'scaleX', 0.1, 10).name('サイズ X').onChange(val => {
+            if (currentEditableMesh) currentEditableMesh.scale.x = val;
+        }).onFinishChange(() => saveState());
+
+        const syCtrl = propFolder.add(guiParams, 'scaleY', 0.1, 10).name('サイズ Y').onChange(val => {
+            if (currentEditableMesh) currentEditableMesh.scale.y = val;
+        }).onFinishChange(() => saveState());
+
+        const szCtrl = propFolder.add(guiParams, 'scaleZ', 0.1, 10).name('サイズ Z').onChange(val => {
+            if (currentEditableMesh) currentEditableMesh.scale.z = val;
+        }).onFinishChange(() => saveState());
+        propFolder.open();
+
+        const fileFolder = gui.addFolder('💾 ファイル操作');
+        fileFolder.add(guiParams, 'export').name('エクスポート');
+        fileFolder.add(guiParams, 'import').name('インポート');
+
+        function updateGuiFromSelection() {
+            if (!currentEditableMesh) return;
+            guiParams.color = '#' + currentEditableMesh.material.color.getHexString();
+            guiParams.scaleX = currentEditableMesh.scale.x;
+            guiParams.scaleY = currentEditableMesh.scale.y;
+            guiParams.scaleZ = currentEditableMesh.scale.z;
+            colorCtrl.updateDisplay();
+            sxCtrl.updateDisplay(); syCtrl.updateDisplay(); szCtrl.updateDisplay();
+        }
+
+        // --- モード管理（頂点・面） ---
+        function toggleVertexEditMode(enabled) {
+            isVertexMode = enabled;
+            if (enabled) { isFaceMode = false; guiParams.faceMode = false; faceMarkersGroup.clear(); createVertexMarkers(currentEditableMesh); }
+            else { vertexMarkersGroup.clear(); if (currentEditableMesh) transformControls.attach(currentEditableMesh); }
+        }
+        function toggleFaceEditMode(enabled) {
+            isFaceMode = enabled;
+            if (enabled) { isVertexMode = false; guiParams.vertexMode = false; vertexMarkersGroup.clear(); createFaceMarkers(currentEditableMesh); }
+            else { faceMarkersGroup.clear(); if (faceHighlighter) scene.remove(faceHighlighter); if (currentEditableMesh) transformControls.attach(currentEditableMesh); }
+        }
+
+        function createVertexMarkers(mesh) {
+            vertexMarkersGroup.clear(); if (!mesh) return;
+            const pos = mesh.geometry.attributes.position.array;
+            const markerGeo = new THREE.SphereGeometry(0.08);
+            const markerMat = new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false });
+            const map = new Map();
+            for (let i = 0; i < pos.length; i += 3) {
+                const v = new THREE.Vector3(pos[i], pos[i+1], pos[i+2]);
+                const key = `${v.x.toFixed(3)},${v.y.toFixed(3)},${v.z.toFixed(3)}`;
+                if (!map.has(key)) {
+                    const marker = new THREE.Mesh(markerGeo, markerMat.clone());
+                    marker.position.copy(v.applyMatrix4(mesh.matrixWorld));
+                    marker.userData = { isVertexMarker: true, indices: [i] };
+                    vertexMarkersGroup.add(marker); map.set(key, marker);
+                } else { map.get(key).userData.indices.push(i); }
+            }
+        }
+
+        function createFaceMarkers(mesh) {
+            faceMarkersGroup.clear(); if (!mesh) return;
+            const pos = mesh.geometry.attributes.position.array;
+            for (let i = 0; i < pos.length; i += 9) {
+                const v1 = new THREE.Vector3(pos[i], pos[i+1], pos[i+2]);
+                const v2 = new THREE.Vector3(pos[i+3], pos[i+4], pos[i+5]);
+                const v3 = new THREE.Vector3(pos[i+6], pos[i+7], pos[i+8]);
+                const center = new THREE.Vector3().add(v1).add(v2).add(v3).divideScalar(3);
+                const marker = new THREE.Mesh(new THREE.SphereGeometry(0.05), new THREE.MeshBasicMaterial({color: 0x00ffff}));
+                marker.position.copy(center.applyMatrix4(mesh.matrixWorld));
+                marker.userData = { isFaceMarker: true, faceIndex: i / 9 };
+                faceMarkersGroup.add(marker);
+            }
+        }
+
+        function extrudeFace() {
+            if (!currentEditableMesh || selectedFaceIndex === -1) return;
+            saveState();
+            const mesh = currentEditableMesh; const oldPos = mesh.geometry.attributes.position.array; const idx = selectedFaceIndex * 9;
+            const v1 = new THREE.Vector3(oldPos[idx], oldPos[idx+1], oldPos[idx+2]);
+            const v2 = new THREE.Vector3(oldPos[idx+3], oldPos[idx+4], oldPos[idx+5]);
+            const v3 = new THREE.Vector3(oldPos[idx+6], oldPos[idx+7], oldPos[idx+8]);
+            const normal = new THREE.Vector3().crossVectors(v2.clone().sub(v1), v3.clone().sub(v1)).normalize();
+            const offset = normal.multiplyScalar(0.5);
+            const newVertices = Array.from(oldPos);
+            const nv1 = v1.clone().add(offset), nv2 = v2.clone().add(offset), nv3 = v3.clone().add(offset);
+            newVertices[idx] = nv1.x; newVertices[idx+1] = nv1.y; newVertices[idx+2] = nv1.z;
+            newVertices[idx+3] = nv2.x; newVertices[idx+4] = nv2.y; newVertices[idx+5] = nv2.z;
+            newVertices[idx+6] = nv3.x; newVertices[idx+7] = nv3.y; newVertices[idx+8] = nv3.z;
+            const addSide = (a, b, na, nb) => {
+                newVertices.push(a.x, a.y, a.z, b.x, b.y, b.z, na.x, na.y, na.z);
+                newVertices.push(b.x, b.y, b.z, nb.x, nb.y, nb.z, na.x, na.y, na.z);
+            };
+            addSide(v1, v2, nv1, nv2); addSide(v2, v3, nv2, nv3); addSide(v3, v1, nv3, nv1);
+            mesh.geometry.dispose(); mesh.geometry = new THREE.BufferGeometry();
+            mesh.geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(newVertices), 3));
+            mesh.geometry.computeVertexNormals();
+            createFaceMarkers(mesh); saveState();
+        }
+
+        // --- ライティング & コントロール ---
+        const amb = new THREE.AmbientLight(0xffffff, 0.6); scene.add(amb);
+        const dir = new THREE.DirectionalLight(0xffffff, 0.6); dir.position.set(10, 20, 10); scene.add(dir);
+        scene.add(new THREE.GridHelper(20, 20));
         const controls = new THREE.OrbitControls(camera, renderer.domElement);
-        camera.position.set(3, 3, 5); 
-        controls.update();
-
+        camera.position.set(5, 5, 5); controls.update();
         const transformControls = new THREE.TransformControls(camera, renderer.domElement);
         scene.add(transformControls);
-
-        transformControls.addEventListener('dragging-changed', function(event) {
-            controls.enabled = !event.value; 
-            if (!event.value) {
-                // ドラッグ終了時にGUIと階層リストを更新
-                if (transformControls.object) {
-                    updateGUIForObject(transformControls.object);
-                }
-            }
-        });
-        
-        transformControls.addEventListener('change', function() {
-            // TransformControlsの移動/回転/スケール変更をリアルタイムでGUIに反映させる
-            if (transformControls.object) {
-                const selectedObject = transformControls.object;
-                
-                // Position, Scale, Rotationを更新
-                guiControls.posX = selectedObject.position.x;
-                guiControls.posY = selectedObject.position.y;
-                guiControls.posZ = selectedObject.position.z;
-                
-                guiControls.scaleX = selectedObject.scale.x;
-                guiControls.scaleY = selectedObject.scale.y;
-                guiControls.scaleZ = selectedObject.scale.z;
-                
-                guiControls.rotationX = THREE.MathUtils.radToDeg(selectedObject.rotation.x);
-                guiControls.rotationY = THREE.MathUtils.radToDeg(selectedObject.rotation.y);
-                guiControls.rotationZ = THREE.MathUtils.radToDeg(selectedObject.rotation.z);
-                
-                // GUIを更新
-                positionFolder.__controllers.forEach(controller => controller.updateDisplay());
-                scaleFolder.__controllers.forEach(controller => controller.updateDisplay());
-                rotationFolder.__controllers.forEach(controller => controller.updateDisplay());
-            }
-
-            // 新機能: グリッドスナップ
-            if (guiControls.gridSnap && !isVertexMode && transformControls.mode === 'translate') {
-                const step = guiControls.snapStep;
-                const pos = transformControls.object.position;
-                pos.x = Math.round(pos.x / step) * step;
-                pos.y = Math.round(pos.y / step) * step;
-                pos.z = Math.round(pos.z / step) * step;
-            }
-
-            if (isVertexMode && transformControls.object && transformControls.object.userData.isVertexMarker) {
-                updateMeshGeometry(currentEditableMesh, transformControls.object);
-            }
-        });
-
-
-        // ----------------------------------------------------
-        // 5. 頂点マーカー操作関数 (元のロジックを維持)
-        // ----------------------------------------------------
-        
-        function isMeshEditable(mesh) {
-            return mesh && (mesh.geometry.type === 'BoxGeometry' || mesh.geometry.type === 'PlaneGeometry' || mesh.geometry instanceof THREE.BufferGeometry);
-        }
-        // (createVertexMarkers, updateMeshGeometry, toggleVertexEditMode 関数は元のロジックを維持し、省略)
-        // ... (元のコードの 5. 頂点マーカー操作関数 のロジックをここに挿入) ...
-        
-        // 元のコードの 5. 頂点マーカー操作関数 の内容を再掲 (簡略化のため中身のコードは省略し、関数定義のみ残す)
-        function createVertexMarkers(mesh) {
-            vertexMarkersGroup.children.forEach(c => c.geometry.dispose());
-            vertexMarkersGroup.children = []; 
-            uniqueVerticesMap.clear();
-
-            if (!isMeshEditable(mesh)) {
-                vertexMarkersGroup.visible = false;
-                return;
-            }
-
-            // ジオメトリをBufferGeometryに変換して編集可能にする
-            if (!(mesh.geometry instanceof THREE.BufferGeometry)) {
-                mesh.geometry = new THREE.BufferGeometry().fromGeometry(mesh.geometry);
-            }
-            
-            const geometry = mesh.geometry;
-            const positions = geometry.attributes.position.array;
-            const markerGeometry = new THREE.SphereGeometry(0.1, 8, 8);
-            const markerMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false });
-
-            for (let i = 0; i < positions.length; i += 3) {
-                const key = `${positions[i].toFixed(3)},${positions[i+1].toFixed(3)},${positions[i+2].toFixed(3)}`;
-                
-                if (!uniqueVerticesMap.has(key)) {
-                    const marker = new THREE.Mesh(markerGeometry, markerMaterial.clone());
-                    const localPos = new THREE.Vector3(positions[i], positions[i+1], positions[i+2]);
-                    marker.position.copy(localPos); 
-
-                    marker.userData.isVertexMarker = true; 
-                    
-                    vertexMarkersGroup.add(marker);
-                    uniqueVerticesMap.set(key, { 
-                        marker: marker, 
-                        indices: [i / 3]
-                    });
-                } else {
-                    uniqueVerticesMap.get(key).indices.push(i / 3);
-                }
-            }
-            vertexMarkersGroup.visible = false;
-        }
-
-        function updateMeshGeometry(mesh, marker) {
-            if (!mesh || !(mesh.geometry instanceof THREE.BufferGeometry)) return;
-            
-            const positionAttribute = mesh.geometry.attributes.position;
-            
-            uniqueVerticesMap.forEach(item => {
-                const markerPos = item.marker.position;
-                
-                item.indices.forEach(index => {
-                    positionAttribute.setXYZ(index, markerPos.x, markerPos.y, markerPos.z);
+        transformControls.addEventListener('dragging-changed', e => controls.enabled = !e.value);
+        transformControls.addEventListener('objectChange', () => {
+            if (isVertexMode && currentEditableMesh) {
+                const pos = currentEditableMesh.geometry.attributes.position;
+                const invMat = new THREE.Matrix4().copy(currentEditableMesh.matrixWorld).invert();
+                vertexMarkersGroup.children.forEach(m => {
+                    const local = m.position.clone().applyMatrix4(invMat);
+                    m.userData.indices.forEach(idx => pos.setXYZ(idx/3, local.x, local.y, local.z));
                 });
-            });
-
-            positionAttribute.needsUpdate = true;
-            mesh.geometry.computeVertexNormals(); 
-        }
-
-        function toggleVertexEditMode(isEnabled) {
-            const isEditable = isMeshEditable(currentEditableMesh);
-            
-            if (!isEditable) {
-                 if (isEnabled) {
-                    guiControls.vertexEditMode = false;
-                    const controller = gui.__controllers.find(c => c.property === 'vertexEditMode');
-                    if (controller) controller.updateDisplay();
-                 }
-                 isVertexMode = false;
-                 return;
-            }
-
-            isVertexMode = isEnabled; 
-            
-            if (isVertexMode) {
-                transformControls.detach(); 
-                currentEditableMesh.visible = false; 
-                vertexMarkersGroup.visible = true; 
-                
-                currentEditableMesh.updateWorldMatrix(true, false);
-                currentEditableMesh.geometry.applyMatrix4(currentEditableMesh.matrixWorld);
-
-                currentEditableMesh.position.set(0, 0, 0);
-                currentEditableMesh.rotation.set(0, 0, 0);
-                currentEditableMesh.scale.set(1, 1, 1);
-                currentEditableMesh.updateMatrixWorld(true);
-
-                vertexMarkersGroup.position.set(0, 0, 0);
-                vertexMarkersGroup.rotation.set(0, 0, 0);
-                vertexMarkersGroup.scale.set(1, 1, 1);
-
-                createVertexMarkers(currentEditableMesh);
-                
-                if (vertexMarkersGroup.children.length > 0) {
-                    transformControls.attach(vertexMarkersGroup.children[0]);
-                    transformControls.setMode('translate');
-                } else {
-                    guiControls.vertexEditMode = false;
-                    const controller = gui.__controllers.find(c => c.property === 'vertexEditMode');
-                    if (controller) controller.updateDisplay();
-                    isVertexMode = false;
-                }
-            } else {
-                transformControls.detach(); 
-                currentEditableMesh.visible = true; 
-                vertexMarkersGroup.visible = false; 
-
-                vertexMarkersGroup.children.forEach(c => c.geometry.dispose());
-                vertexMarkersGroup.children = [];
-                uniqueVerticesMap.clear();
-                
-                transformControls.attach(currentEditableMesh); 
-                updateGUIForObject(currentEditableMesh); 
-            }
-            // 頂点編集モードの切り替え時に、現在のモデルのGUIを更新
-            updateGUIForObject(currentEditableMesh);
-        }
-
-        // ----------------------------------------------------
-        // 6. 初期オブジェクトの作成とdat.GUIのセットアップ 
-        // ----------------------------------------------------
-
-        const geometry = new THREE.BoxGeometry(1, 1, 1);
-        // マテリアルをPBR (Standard) に変更
-        const material = new THREE.MeshStandardMaterial({ 
-            color: 0x0077ff,
-            metalness: 0.1, // PBRパラメータ
-            roughness: 0.8  // PBRパラメータ
-        }); 
-        const cube = new THREE.Mesh(geometry, material);
-        cube.name = 'Cube_1'; 
-        cube.position.y = 0.5; 
-        scene.add(cube);
-        
-        currentEditableMesh = cube;
-        createVertexMarkers(currentEditableMesh); 
-        
-        transformControls.attach(cube); 
-
-        // GUIコントロールオブジェクトを拡張
-        const guiControls = {
-            // PBR マテリアル
-            color: '#0077ff', 
-            metalness: 0.1,
-            roughness: 0.8,
-            emissive: '#000000',
-
-            visible: true,
-            wireframe: false, 
-            
-            // 新機能: Position (絶対位置)
-            posX: cube.position.x,
-            posY: cube.position.y,
-            posZ: cube.position.z,
-
-            // Scale
-            scaleX: 1.0,
-            scaleY: 1.0,
-            scaleZ: 1.0,
-
-            // Rotation
-            rotationX: 0, 
-            rotationY: 0, 
-            rotationZ: 0, 
-            
-            // モデリング機能
-            vertexEditMode: false,
-            gridSnap: false, // 新機能: グリッドスナップ
-            snapStep: 0.5,    // 新機能: スナップ間隔
-
-            // ワークスペース
-            toggleGround: true,
-            
-            // 新機能: ライト設定
-            lightX: spotLight.position.x,
-            lightY: spotLight.position.y,
-            lightZ: spotLight.position.z,
-            lightIntensity: spotLight.intensity,
-            lightVisible: true
-        };
-
-        gui = new dat.GUI();
-
-        // --- ワークスペース ---
-        const workspaceFolder = gui.addFolder('🖥️ ワークスペース');
-        workspaceFolder.open();
-
-        workspaceFolder.add(guiControls, 'toggleGround')
-            .name('床 (グリッド) を表示')
-            .onChange(toggleGroundPlane);
-            
-        workspaceFolder.add(guiControls, 'gridSnap') // 新機能: グリッドスナップ
-            .name('グリッドスナップ (移動)')
-            .onChange(function(value) {
-                // スナップの有効化/無効化。TransformControlsのchangeイベント内で処理
-            });
-            
-        workspaceFolder.add(guiControls, 'snapStep', 0.1, 1.0, 0.1) // 新機能: スナップ間隔
-            .name('スナップ間隔');
-
-        // --- ライト設定 ---
-        const lightFolder = gui.addFolder('💡 スポットライト設定');
-        lightFolder.open();
-        
-        lightFolder.add(guiControls, 'lightVisible').name('ライトを表示').onChange(function(value) {
-            spotLight.visible = value;
-            spotLightHelper.visible = value;
-        });
-
-        lightFolder.add(guiControls, 'lightIntensity', 0, 5, 0.1).name('強度').onChange(function(value) {
-            spotLight.intensity = value;
-        });
-        
-        lightFolder.add(guiControls, 'lightX', -10, 10, 0.1).name('位置 X').onChange(function(value) {
-            spotLight.position.x = value;
-            spotLightHelper.update();
-        });
-        lightFolder.add(guiControls, 'lightY', 0, 20, 0.1).name('位置 Y').onChange(function(value) {
-            spotLight.position.y = value;
-            spotLightHelper.update();
-        });
-        lightFolder.add(guiControls, 'lightZ', -10, 10, 0.1).name('位置 Z').onChange(function(value) {
-            spotLight.position.z = value;
-            spotLightHelper.update();
-        });
-
-
-        // --- モデリング/マテリアル ---
-        
-        // 頂点編集モード
-        gui.add(guiControls, 'vertexEditMode')
-            .name('頂点編集モード (V)')
-            .onChange(function(value) {
-                toggleVertexEditMode(value);
-            });
-            
-        materialFolder = gui.addFolder('🎨 マテリアル (PBR)');
-        materialFolder.open();
-        
-        materialFolder.addColor(guiControls, 'color').name('基本色 (Albedo)').onChange(updateMaterialProperties);
-        materialFolder.add(guiControls, 'metalness', 0, 1, 0.01).name('メタリック').onChange(updateMaterialProperties);
-        materialFolder.add(guiControls, 'roughness', 0, 1, 0.01).name('ラフネス').onChange(updateMaterialProperties);
-        materialFolder.addColor(guiControls, 'emissive').name('発光色').onChange(updateMaterialProperties);
-
-        materialFolder.add(guiControls, 'wireframe')
-            .name('ワイヤーフレーム表示')
-            .onChange(function(value) {
-                const target = isVertexMode ? currentEditableMesh : transformControls.object;
-                if (target && target.material) {
-                    target.material.wireframe = value;
-                }
-            });
-
-        // 可視性
-        gui.add(guiControls, 'visible').onChange(function(value) {
-             if (transformControls.object && !isVertexMode) {
-                transformControls.object.visible = value;
-                updateHierarchyList(); // 階層リストも更新
-            }
-        }).name('Selected Model Visible');
-
-
-        // --- 変換 (Position, Scale, Rotation) ---
-        
-        // 新機能: Position Folder (絶対位置)
-        positionFolder = gui.addFolder('📍 Position');
-        positionFolder.open();
-        
-        positionFolder.add(guiControls, 'posX', -10, 10, 0.01).name('Position X').onChange(function(value) {
-            if (transformControls.object && !isVertexMode) {
-                transformControls.object.position.x = value;
-            }
-        });
-        positionFolder.add(guiControls, 'posY', -10, 10, 0.01).name('Position Y').onChange(function(value) {
-            if (transformControls.object && !isVertexMode) {
-                transformControls.object.position.y = value;
-            }
-        });
-        positionFolder.add(guiControls, 'posZ', -10, 10, 0.01).name('Position Z').onChange(function(value) {
-            if (transformControls.object && !isVertexMode) {
-                transformControls.object.position.z = value;
+                pos.needsUpdate = true; currentEditableMesh.geometry.computeVertexNormals();
             }
         });
 
-
-        scaleFolder = gui.addFolder('📏 Size (Scale)');
-        scaleFolder.open(); 
-        
-        const minScale = 0.001; 
-        const stepScale = 0.1; 
-
-        scaleFolder.add(guiControls, 'scaleX', minScale, 10, stepScale).name('Width (X)').onChange(function(value) {
-            if (transformControls.object && !isVertexMode) {
-                if (value < minScale || isNaN(value)) { value = minScale; }
-                transformControls.object.scale.x = value;
-            }
-        });
-
-        scaleFolder.add(guiControls, 'scaleY', minScale, 10, stepScale).name('Height (Y)').onChange(function(value) {
-            if (transformControls.object && !isVertexMode) {
-                if (value < minScale || isNaN(value)) { value = minScale; }
-                transformControls.object.scale.y = value;
-            }
-        });
-
-        scaleFolder.add(guiControls, 'scaleZ', minScale, 10, stepScale).name('Depth (Z)').onChange(function(value) {
-            if (transformControls.object && !isVertexMode) {
-                if (value < minScale || isNaN(value)) { value = minScale; }
-                transformControls.object.scale.z = value;
-            }
-        });
-        
-        rotationFolder = gui.addFolder('🔄 Rotation');
-        rotationFolder.open();
-        
-        rotationFolder.add(guiControls, 'rotationX', -180, 180, 1).name('Rotation X').onChange(function(value) {
-            if (transformControls.object && !isVertexMode) {
-                transformControls.object.rotation.x = THREE.MathUtils.degToRad(value);
-            }
-        });
-        
-        rotationFolder.add(guiControls, 'rotationY', -180, 180, 1).name('Rotation Y').onChange(function(value) {
-            if (transformControls.object && !isVertexMode) {
-                transformControls.object.rotation.y = THREE.MathUtils.degToRad(value);
-            }
-        });
-        
-        rotationFolder.add(guiControls, 'rotationZ', -180, 180, 1).name('Rotation Z').onChange(function(value) {
-            if (transformControls.object && !isVertexMode) {
-                transformControls.object.rotation.z = THREE.MathUtils.degToRad(value);
-            }
-        });
-
-        // --- ファイル操作フォルダ ---
-        const fileFolder = gui.addFolder('💾 ファイル操作');
-        fileFolder.open();
-
-        const fileControls = {
-            openExportModal: function() { 
-                document.getElementById('exportModal').style.display = 'block';
-                document.getElementById('jsonOptions').style.display = 
-                    (document.getElementById('exportFormatSelect').value === 'json' ? 'block' : 'none');
-            },
-            import: function() {
-                document.getElementById('fileInput').click();
-            }
-        };
-
-        fileFolder.add(fileControls, 'openExportModal').name('エクスポート実行'); 
-        fileFolder.add(fileControls, 'import').name('シーンをインポート');
-        
-        // --- マテリアル更新ヘルパー関数 ---
-        function updateMaterialProperties() {
-            const target = isVertexMode ? currentEditableMesh : transformControls.object;
-            if (target && target.material) {
-                target.material.color.set(guiControls.color);
-                if (target.material.metalness !== undefined) {
-                    target.material.metalness = guiControls.metalness;
-                }
-                if (target.material.roughness !== undefined) {
-                    target.material.roughness = guiControls.roughness;
-                }
-                if (target.material.emissive !== undefined) {
-                    target.material.emissive.set(guiControls.emissive);
-                }
-                target.material.needsUpdate = true;
-            }
-        }
-
-        // ----------------------------------------------------
-        // 7. 新しい図形を追加する関数 
-        // ----------------------------------------------------
-        
-        let meshCounter = 2; 
-
-        function createRandomMaterial() {
-            const randomColor = Math.random() * 0xffffff;
-            // PBR (Standard) マテリアルを使用
-            const newMaterial = new THREE.MeshStandardMaterial({ 
-                color: randomColor,
-                metalness: 0.1,
-                roughness: 0.8
-            });
-            
-            guiControls.color = '#' + newMaterial.color.getHexString();
-            guiControls.metalness = 0.1;
-            guiControls.roughness = 0.8;
-            guiControls.emissive = '#000000';
-            
-            guiControls.wireframe = newMaterial.wireframe || false; 
-
-            // GUIの更新
-            const controllers = gui.__controllers.concat(materialFolder.__controllers);
-            controllers.forEach(c => c.updateDisplay());
-
-            return newMaterial;
-        }
-
-        function addObject(geometry, typeName, initialRotation = new THREE.Euler(0, 0, 0)) {
-            if (isVertexMode) toggleVertexEditMode(false); 
-
-            const material = createRandomMaterial();
-            const mesh = new THREE.Mesh(geometry, material);
-            mesh.name = `${typeName}_${meshCounter++}`; 
-            
-            mesh.rotation.copy(initialRotation);
-
-            let initialYOffset = 0.5;
-            if (geometry.parameters.height !== undefined) {
-                initialYOffset = geometry.parameters.height / 2;
-            } else if (geometry.parameters.radius !== undefined) {
-                initialYOffset = geometry.parameters.radius;
-            }
-            if (typeName === 'Plane') {
-                initialYOffset = 0.001; 
-            }
-            
-            mesh.position.set(
-                Math.random() * 4 - 2, 
-                initialYOffset,
-                Math.random() * 4 - 2
-            );
-
-            scene.add(mesh);
-            selectObject(mesh); // 追加後に選択
-            updateHierarchyList(); // 新機能: 階層リストを更新
-            return mesh; 
-        }
-
-        function addBox() {
-            const geometry = new THREE.BoxGeometry(1, 1, 1);
-            addObject(geometry, 'Cube');
-        }
-
-        function addSphere() {
-            const geometry = new THREE.SphereGeometry(1, 32, 32);
-            addObject(geometry, 'Sphere');
-        }
-
-        function addTorus() {
-            const geometry = new THREE.TorusGeometry(1, 0.4, 16, 100);
-            addObject(geometry, 'Torus');
-        }
-        
-        function addCylinder() {
-            const geometry = new THREE.CylinderGeometry(0.5, 0.5, 1, 32); 
-            addObject(geometry, 'Cylinder');
-        }
-        
-        function addPlane() {
-            const geometry = new THREE.PlaneGeometry(2, 2); 
-            const initialRotation = new THREE.Euler(-Math.PI / 2, 0, 0);
-            addObject(geometry, 'Plane', initialRotation);
-        }
-        
-        function duplicateSelectedObject() {
-            const selectedObject = transformControls.object;
-            if (!selectedObject || isVertexMode) return;
-
-            const clonedObject = selectedObject.clone();
-            
-            if (clonedObject.geometry instanceof THREE.BufferGeometry) {
-                 clonedObject.geometry = clonedObject.geometry.clone();
-            }
-
-            clonedObject.position.x += 0.5;
-            clonedObject.position.z += 0.5;
-            
-            clonedObject.name = `${selectedObject.name}_Clone_${meshCounter++}`;
-            
-            scene.add(clonedObject);
-            selectObject(clonedObject); // 複製後に選択
-            updateHierarchyList(); // 新機能: 階層リストを更新
-        }
-        
-        function selectObject(mesh) {
-            transformControls.attach(mesh);
-            currentEditableMesh = mesh;
-            if (isMeshEditable(currentEditableMesh)) {
-                 createVertexMarkers(currentEditableMesh);
-            } else {
-                 createVertexMarkers(null); 
-            }
-            updateGUIForObject(mesh);
-            updateHierarchyList(); // 階層リストの選択状態を更新
-        }
-        
-        function deleteSelectedObject() {
-             if (transformControls.object) {
-                const objectToDelete = transformControls.object;
-                if (isVertexMode) {
-                    toggleVertexEditMode(false); 
-                } 
-                scene.remove(objectToDelete);
-                objectToDelete.geometry.dispose();
-                objectToDelete.material.dispose();
-                
-                transformControls.detach(); 
-                currentEditableMesh = null;
-                
-                updateHierarchyList(); // 階層リストを更新
-            }
-        }
-
-
-        // ----------------------------------------------------
-        // 8. 階層リスト機能 (新機能)
-        // ----------------------------------------------------
-        
-        function updateHierarchyList() {
-            const listElement = document.getElementById('object-list');
-            listElement.innerHTML = '';
-            
-            const selectedObject = transformControls.object;
-
-            scene.traverse(function(object) {
-                if (object.isMesh && object !== gridHelper && object.parent === scene) {
-                    
-                    const listItem = document.createElement('li');
-                    listItem.dataset.name = object.name;
-                    listItem.id = 'list-item-' + object.uuid;
-                    
-                    if (selectedObject && selectedObject.uuid === object.uuid) {
-                        listItem.classList.add('selected');
-                    }
-                    
-                    const nameSpan = document.createElement('span');
-                    nameSpan.className = 'object-name';
-                    nameSpan.textContent = object.name;
-                    listItem.appendChild(nameSpan);
-
-                    // 可視性トグル
-                    const visibleIcon = document.createElement('span');
-                    visibleIcon.className = 'action-icon';
-                    visibleIcon.textContent = object.visible ? '👁️' : '🚫';
-                    visibleIcon.title = object.visible ? '非表示' : '表示';
-                    visibleIcon.onclick = function(event) {
-                        event.stopPropagation();
-                        object.visible = !object.visible;
-                        updateHierarchyList(); // アイコンとGUIを更新
-                        if (selectedObject && selectedObject.uuid === object.uuid) {
-                             guiControls.visible = object.visible;
-                             gui.__controllers.find(c => c.property === 'visible').updateDisplay();
-                        }
-                    };
-                    listItem.appendChild(visibleIcon);
-
-                    // 削除ボタン
-                    const deleteIcon = document.createElement('span');
-                    deleteIcon.className = 'action-icon';
-                    deleteIcon.textContent = '🗑️';
-                    deleteIcon.title = '削除';
-                    deleteIcon.onclick = function(event) {
-                        event.stopPropagation();
-                        if (confirm(`${object.name} を削除しますか？`)) {
-                            // 削除処理は deleteSelectedObject と同様だが、指定オブジェクトを削除
-                            if (transformControls.object && transformControls.object.uuid === object.uuid) {
-                                deleteSelectedObject();
-                            } else {
-                                scene.remove(object);
-                                object.geometry.dispose();
-                                object.material.dispose();
-                                updateHierarchyList();
-                            }
-                        }
-                    };
-                    listItem.appendChild(deleteIcon);
-                    
-                    listItem.onclick = function() {
-                        selectObject(object);
-                    };
-
-                    listElement.appendChild(listItem);
-                }
-            });
-        }
-
-
-        // ----------------------------------------------------
-        // 9. エクスポート/インポート機能 (元のロジックを維持)
-        // ----------------------------------------------------
-
-        // ... (exportSceneJSON, exportSceneOBJ, exportSceneGLB, saveString, saveArrayBuffer 関数は元のロジックを維持し、省略) ...
-        // ... (importScene 関数は元のロジックを維持し、省略。ただし、importSceneの最後で updateHierarchyList() を呼び出す必要がある) ...
-
-        function importScene(jsonString) {
-            // ... (インポートロジック: オブジェクトをクリアし、JSONから再構築) ...
-            
-            // NOTE: ここに元の importScene のロジック全体を挿入してください。
-            // 簡略化のため、ここでは最後の処理のみ記述します。
-            
-            // (中略 - JSON解析とオブジェクトの生成)
-            
-            // ...
-            // if (currentEditableMesh) {
-            //      updateGUIForObject(currentEditableMesh); 
-            // }
-            
-            // alert(`シーンに${importedCount}個のモデルをインポートしました。`);
-
-            // ★追加: インポート後、階層リストを更新
-            updateHierarchyList();
-        }
-
-        function updateGUIForObject(selectedObject) {
-            // PBR Material のプロパティを反映
-            const material = selectedObject.material;
-            const hexColor = '#' + material.color.getHexString();
-            guiControls.color = hexColor;
-            
-            if (material.metalness !== undefined) {
-                 guiControls.metalness = material.metalness;
-            }
-            if (material.roughness !== undefined) {
-                 guiControls.roughness = material.roughness;
-            }
-            if (material.emissive !== undefined) {
-                 guiControls.emissive = '#' + material.emissive.getHexString();
-            }
-
-            // 新機能: Position (絶対位置) の反映
-            guiControls.posX = selectedObject.position.x;
-            guiControls.posY = selectedObject.position.y;
-            guiControls.posZ = selectedObject.position.z;
-            
-            guiControls.scaleX = selectedObject.scale.x;
-            guiControls.scaleY = selectedObject.scale.y;
-            guiControls.scaleZ = selectedObject.scale.z;
-            
-            guiControls.rotationX = THREE.MathUtils.radToDeg(selectedObject.rotation.x);
-            guiControls.rotationY = THREE.MathUtils.radToDeg(selectedObject.rotation.y);
-            guiControls.rotationZ = THREE.MathUtils.radToDeg(selectedObject.rotation.z);
-            
-            guiControls.visible = selectedObject.visible;
-            guiControls.wireframe = selectedObject.material.wireframe; 
-            
-            // すべてのGUIコントローラーを更新
-            gui.__controllers.forEach(controller => controller.updateDisplay());
-            gui.__folders['🎨 マテリアル (PBR)'].__controllers.forEach(controller => controller.updateDisplay());
-            positionFolder.__controllers.forEach(controller => controller.updateDisplay());
-            scaleFolder.__controllers.forEach(controller => controller.updateDisplay());
-            rotationFolder.__controllers.forEach(controller => controller.updateDisplay());
-
-        }
-
-
-        // ----------------------------------------------------
-        // 10. オブジェクト選択ロジック (Raycasting)
-        // ----------------------------------------------------
-
-        function onPointerDown(event) {
+        // --- イベントリスナー ---
+        window.addEventListener('pointerdown', e => {
             if (transformControls.dragging) return;
-            
-            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-            mouse.y = - (event.clientY / window.innerHeight) * 2 + 1;
-
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1; mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
             raycaster.setFromCamera(mouse, camera);
-
             if (isVertexMode) {
-                const markers = vertexMarkersGroup.children;
-                const intersects = raycaster.intersectObjects(markers, false);
-
-                markers.forEach(m => m.material.color.set(0xff0000));
-                
-                if (intersects.length > 0) {
-                    const selectedMarker = intersects[0].object;
-                    transformControls.attach(selectedMarker);
-                    selectedMarker.material.color.set(0x00ff00);
-                    transformControls.setMode('translate');
-                } else {
-                    transformControls.detach();
+                const hits = raycaster.intersectObjects(vertexMarkersGroup.children);
+                if (hits.length > 0) transformControls.attach(hits[0].object);
+            } else if (isFaceMode) {
+                const hits = raycaster.intersectObjects(faceMarkersGroup.children);
+                if (hits.length > 0) {
+                    selectedFaceIndex = hits[0].object.userData.faceIndex;
+                    if (faceHighlighter) scene.remove(faceHighlighter);
+                    const pos = currentEditableMesh.geometry.attributes.position.array;
+                    const idx = selectedFaceIndex * 9;
+                    const geo = new THREE.BufferGeometry();
+                    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([pos[idx], pos[idx+1], pos[idx+2], pos[idx+3], pos[idx+4], pos[idx+5], pos[idx+6], pos[idx+7], pos[idx+8]]), 3));
+                    faceHighlighter = new THREE.Mesh(geo, highlightMaterial); faceHighlighter.applyMatrix4(currentEditableMesh.matrixWorld); scene.add(faceHighlighter);
                 }
-
             } else {
-                const objects = scene.children.filter(obj => obj.isMesh && obj !== gridHelper);
-                const intersects = raycaster.intersectObjects(objects, true);
-
-                if (intersects.length > 0) {
-                    const selectedObject = intersects[0].object;
-                    selectObject(selectedObject);
-                } else {
-                    // 何も選択されなかった場合は TransformControls をデタッチ
-                    transformControls.detach();
-                    currentEditableMesh = null;
-                    createVertexMarkers(null); // マーカーをクリア
-                    updateHierarchyList();
+                const hits = raycaster.intersectObjects(scene.children.filter(obj => obj.isMesh && !obj.userData.isMarker));
+                if (hits.length > 0) { 
+                    currentEditableMesh = hits[0].object; 
+                    transformControls.attach(currentEditableMesh);
+                    updateGuiFromSelection(); // 選択時にメニューを更新
                 }
             }
-        }
-
-        // ----------------------------------------------------
-        // 11. イベントリスナーの設定
-        // ----------------------------------------------------
-        
-        window.addEventListener('pointerdown', onPointerDown, false);
-
-        // ファイルインポートの処理
-        document.getElementById('fileInput').addEventListener('change', function(event) {
-            const file = event.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    importScene(e.target.result);
-                };
-                reader.readAsText(file);
-            }
-        }, false);
-        
-        // キーボードイベントの設定
-        window.addEventListener('keydown', function(event) {
-            keysPressed[event.key.toLowerCase()] = true; 
-            
-            // Ctrl + D (複製) の処理
-            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'd') { 
-                event.preventDefault(); 
-                duplicateSelectedObject();
-                return;
-            }
-            
-            switch (event.key.toLowerCase()) {
-                case 't': 
-                    transformControls.setMode('translate');
-                    break;
-                case 'r': 
-                    if (!isVertexMode) transformControls.setMode('rotate'); 
-                    break;
-                case 's': 
-                    if (!isVertexMode) transformControls.setMode('scale');  
-                    break;
-                case 'v': 
-                    const isEditable = isMeshEditable(currentEditableMesh); 
-
-                    if (isEditable) {
-                        guiControls.vertexEditMode = !guiControls.vertexEditMode;
-                        const controller = gui.__controllers.find(c => c.property === 'vertexEditMode');
-                        if (controller) controller.setValue(guiControls.vertexEditMode);
-                    }
-                    break;
-                case 'delete': 
-                case 'backspace': // MacのDeleteキーに対応
-                    deleteSelectedObject();
-                    event.preventDefault(); 
-                    break;
-            }
         });
 
-        window.addEventListener('keyup', function(event) {
-            keysPressed[event.key.toLowerCase()] = false;
-        });
-        
-        // モーダルイベントリスナーの設定 (元のロジックを維持)
-        const modal = document.getElementById('exportModal');
-        const formatSelect = document.getElementById('exportFormatSelect');
-        const includeGeometryCheckbox = document.getElementById('includeGeometryCheckbox');
-        const jsonOptionsDiv = document.getElementById('jsonOptions');
-        const confirmButton = document.getElementById('confirmExportButton');
-        const cancelButton = document.getElementById('cancelExportButton');
-
-        formatSelect.addEventListener('change', function() {
-            jsonOptionsDiv.style.display = (formatSelect.value === 'json' ? 'block' : 'none');
-        });
-
-        cancelButton.addEventListener('click', function() {
-            modal.style.display = 'none';
-        });
-
-        confirmButton.addEventListener('click', function() {
-            modal.style.display = 'none';
-
-            const format = formatSelect.value;
-            const includeGeo = includeGeometryCheckbox.checked;
-
-            switch (format) {
-                case 'json':
-                    exportSceneJSON(includeGeo); 
-                    break;
-                case 'obj':
-                    exportSceneOBJ();
-                    break;
-                case 'glb':
-                    exportSceneGLB();
-                    break;
-                default:
-                    alert('エクスポート形式が選択されていません。');
+        // エクスポート実行
+        document.getElementById('confirmExportButton').addEventListener('click', () => {
+            const format = document.getElementById('exportFormatSelect').value;
+            if (format === 'json') {
+                const link = document.createElement('a');
+                link.href = 'data:text/json;charset=utf-8,' + encodeURIComponent(history.stack[history.index]);
+                link.download = 'scene.json'; link.click();
+            } else if (format === 'obj') {
+                const exporter = new THREE.OBJExporter();
+                const result = exporter.parse(scene);
+                const blob = new Blob([result], { type: 'text/plain' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob); link.download = 'model.obj'; link.click();
+            } else if (format === 'glb') {
+                const exporter = new THREE.GLTFExporter();
+                exporter.parse(scene, (result) => {
+                    const blob = new Blob([result], { type: 'application/octet-stream' });
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(blob); link.download = 'model.glb'; link.click();
+                }, { binary: true });
             }
+            document.getElementById('exportModal').style.display = 'none';
         });
 
-
-        // ----------------------------------------------------
-        // 12. アニメーションループ / 初期化
-        // ----------------------------------------------------
-
-        function handleCameraMovement() {
-            // (カメラ移動のロジックは元のコードと同じため省略)
-            let moved = false;
-            
-            const direction = new THREE.Vector3();
-            camera.getWorldDirection(direction); 
-            direction.y = 0; 
-            direction.normalize();
-
-            const right = new THREE.Vector3().crossVectors(direction, camera.up);
-
-            if (keysPressed['w']) {
-                camera.position.addScaledVector(direction, moveSpeed); 
-                moved = true;
-            }
-            if (keysPressed['s']) {
-                camera.position.addScaledVector(direction, -moveSpeed); 
-                moved = true;
-            }
-            if (keysPressed['a']) {
-                camera.position.addScaledVector(right, -moveSpeed); 
-                moved = true;
-            }
-            if (keysPressed['d']) {
-                camera.position.addScaledVector(right, moveSpeed); 
-                moved = true;
-            }
-            
-            if (moved) {
-                controls.enabled = false;
-                
-                controls.target.addScaledVector(direction, keysPressed['w'] ? moveSpeed : (keysPressed['s'] ? -moveSpeed : 0));
-                controls.target.addScaledVector(right, keysPressed['d'] ? moveSpeed : (keysPressed['a'] ? -moveSpeed : 0));
-            } else if (!transformControls.dragging) {
-                controls.enabled = true;
-            }
-        }
-        
-        function animate() {
-            requestAnimationFrame(animate);
-            
-            handleCameraMovement(); 
-            
-            controls.update(); 
-            renderer.render(scene, camera);
-        }
-
-        animate();
-        updateHierarchyList(); // 初期化時に階層リストを一度作成
-        
-        // ----------------------------------------------------
-        // 13. ウィンドウサイズ変更対応
-        // ----------------------------------------------------
-        
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
+        document.getElementById('fileInput').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.onload = (event) => applyState(event.target.result);
+            reader.readAsText(file);
         });
 
+        window.addEventListener('keydown', e => {
+            if (e.key.toLowerCase() === 'v') { guiParams.vertexMode = !guiParams.vertexMode; toggleVertexEditMode(guiParams.vertexMode); }
+            if (e.key.toLowerCase() === 'f') { guiParams.faceMode = !guiParams.faceMode; toggleFaceEditMode(guiParams.faceMode); }
+            if (e.ctrlKey && e.key === 'z') undo();
+        });
+
+        function addBox() { const m = new THREE.Mesh(new THREE.BoxGeometry(1,1,1).toNonIndexed(), new THREE.MeshPhongMaterial({color: 0x0077ff})); m.position.y=0.5; scene.add(m); currentEditableMesh=m; transformControls.attach(m); updateGuiFromSelection(); saveState(); }
+        function addSphere() { const m = new THREE.Mesh(new THREE.SphereGeometry(0.7,12,12).toNonIndexed(), new THREE.MeshPhongMaterial({color: 0x00ff77})); m.position.y=0.7; scene.add(m); currentEditableMesh=m; transformControls.attach(m); updateGuiFromSelection(); saveState(); }
+        function addCylinder() { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.5,1,12).toNonIndexed(), new THREE.MeshPhongMaterial({color: 0xff7700})); m.position.y=0.5; scene.add(m); currentEditableMesh=m; transformControls.attach(m); updateGuiFromSelection(); saveState(); }
+        function addPlane() { const m = new THREE.Mesh(new THREE.PlaneGeometry(2,2).toNonIndexed(), new THREE.MeshPhongMaterial({color: 0x777777, side:2})); m.rotation.x=-Math.PI/2; scene.add(m); currentEditableMesh=m; transformControls.attach(m); updateGuiFromSelection(); saveState(); }
+
+        function animate() { requestAnimationFrame(animate); renderer.render(scene, camera); }
+        animate(); saveState();
     </script>
 </body>
 </html>
